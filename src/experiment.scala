@@ -58,7 +58,7 @@ abstract class Node extends IndexedSeq[IndexNode]  {
   def |(rhs: Node): Node = new BinaryNode(BinaryOp.Or, this, rhs)
   def ^(rhs: Node): Node = new BinaryNode(BinaryOp.Xor, this, rhs)
 
-  def unary_~ : Node =  new NegateNode(this)
+  def unary_~ : Node = new NegateNode(this)
 
   def ++(rhs: Node): Node = new ConcatNode(Vector(this, rhs))
 
@@ -71,6 +71,9 @@ abstract class Node extends IndexedSeq[IndexNode]  {
 
 object EmptyNode extends Node {
   override def length: Int = 0
+
+  def unary_~ : Node = EmptyNode
+  override def ++(rhs: Node): Node = rhs
 }
 
 class InputNode(len: Int, val name: String) extends Node {
