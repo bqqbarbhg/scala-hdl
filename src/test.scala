@@ -2,8 +2,19 @@ package hdl
 
 import scala.collection.mutable
 
-class TempNode(len: Int) extends Node {
-  override val length: Int = len
+abstract class Pass {
+  protected var state = new mutable.HashMap[Node, Node]()
+
+  def map(node: Node): Node = node.mapNodes(a => this(a))
+
+  def apply(node: Node): Node = {
+    for (res <- state.get(node)) return res
+
+    val res = map(node)
+
+    state.put(node, res)
+    res
+  }
 }
 
 object Test extends App {

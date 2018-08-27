@@ -33,6 +33,8 @@ object BinaryOp {
 abstract class Node extends IndexedSeq[IndexNode]  {
   def length: Int
 
+  def mapNodes(f: Node => Node): Node
+
   override def iterator: Iterator[IndexNode] = new IndexNodeIterator(this)
 
   override def apply(index: Int): IndexNode = {
@@ -72,20 +74,28 @@ abstract class Node extends IndexedSeq[IndexNode]  {
 object EmptyNode extends Node {
   override def length: Int = 0
 
-  def unary_~ : Node = EmptyNode
+  override def mapNodes(f: Node => Node): Node = EmptyNode
+
+  override def unary_~ : Node = EmptyNode
   override def ++(rhs: Node): Node = rhs
 }
 
 class InputNode(len: Int, val name: String) extends Node {
   override val length: Int = len
+
+  override def mapNodes(f: Node => Node): Node = this
 }
 
 class ConstantNode(len: Int, val value: Int) extends Node {
   override val length: Int = len
+
+  override def mapNodes(f: Node => Node): Node = this
 }
 
 class IndexNode(val node: Node, val index: Int) extends Node {
   override def length: Int = 1
+
+  override def mapNodes(f: Node => Node): Node = new IndexNode(f(node), index)
 
   override def iterator: Iterator[IndexNode] = Iterator.single(this)
 
@@ -98,22 +108,29 @@ class IndexNode(val node: Node, val index: Int) extends Node {
 
 class SliceNode(val node: Node, val offset: Int, len: Int) extends Node {
   override val length: Int = len
+
+  override def mapNodes(f: Node => Node): Node = new SliceNode(f(node), offset, length)
 }
 
 class ConcatNode(val nodes: Vector[Node]) extends Node {
   override val length = nodes.iterator.map(_.length).sum
 
+  override def mapNodes(f: Node => Node): Node = new ConcatNode(nodes.map(f))
+
   override def ++(rhs: Node): Node = new ConcatNode(nodes ++ rhs)
 }
-
 
 class BinaryNode(val op: BinaryOp, val left: Node, val right: Node) extends Node {
   assert(left.length == right.length)
 
   override val length = left.length
+
+  override def mapNodes(f: Node => Node): Node = new BinaryNode(op, f(left), f(right))
 }
 
 class NegateNode(val node: Node) extends Node {
   override val length = node.length
+
+  override def mapNodes(f: Node => Node): Node = new NegateNode(f(node))
 }
 
