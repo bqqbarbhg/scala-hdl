@@ -11,6 +11,8 @@ abstract class Pass {
     for (res <- state.get(node)) return res
 
     val res = map(node)
+    if (res != node)
+      res.stackTrace = res.stackTrace ::: Node.stackTrace()
 
     state.put(node, res)
     res
@@ -28,6 +30,81 @@ object IncrementConstants extends Pass {
     case _ => super.map(node)
   }
 
+}
+
+class InputNode(val module: Module, val len: Int) extends Node {
+  var node: Option[Node] = None
+
+  override def length: Int = len
+  override def mapNodes(f: Node => Node): Node = this
+
+  def clear(): Unit = { node = None }
+
+  def :=(n: Node): Unit = {
+    assert(node.isEmpty, s"Input $this is already connected to ${node.get}")
+    assert(n.length == length, s"Input size mismatch, expected $length got ${n.length}")
+    node = Some(n)
+  }
+}
+
+class OutputNode(val module: Module, val len: Int) extends Node {
+  var node: Option[Node] = None
+
+  override def length: Int = len
+  override def mapNodes(f: Node => Node): Node = this
+
+  def :=(n: Node): Unit = {
+    assert(node.isEmpty, s"Output $this is already connected to ${node.get}")
+    assert(n.length == length, s"Output size mismatch, expected $length got ${n.length}")
+    node = Some(n)
+  }
+}
+
+abstract class Module {
+  private var inputsMutable: Vector[InputNode] = Vector[InputNode]()
+  private var outputsMutable: Vector[OutputNode] = Vector[OutputNode]()
+
+  protected def input(len: Int): InputNode = {
+    val node = new InputNode(this, len)
+    inputsMutable :+= node
+    node
+  }
+
+  protected def output(len: Int): OutputNode = {
+    val node = new OutputNode(this, len)
+    outputsMutable :+= node
+    node
+  }
+
+  def inputs: Vector[InputNode] = inputsMutable
+  def outputs: Vector[OutputNode] = outputsMutable
+
+  def spec(state: State): Unit = { }
+}
+
+trait State {
+  def apply(node: Node): Int
+  def update(node: Node, value: Int): Unit
+}
+
+abstract class AddBit extends Module {
+  val a = input(1)
+  val b = input(1)
+  val cin = input(1)
+
+  val r = output(1)
+  val cout = output(1)
+
+  override def spec(s: State): Unit = {
+    val res = s(a) + s(b) + s(cin)
+    s(r) = res & 1
+    s(cout) = res >> 1
+  }
+}
+
+class AddBitImpl extends AddBit {
+  r := a ^ b ^ cin
+  cout := (a & b) | (b & cin) | (cin & a)
 }
 
 object Test extends App {
@@ -70,10 +147,20 @@ object Test extends App {
       case n: IndexNode => (eval(n.node, state) >> n.index) & 1
       case n: SliceNode => (eval(n.node, state) >> n.offset) & ((1 << n.length) - 1)
       case n: ConstantNode => n.value
+      case n: InputNode => eval(n.node.get, state)
+      case n: OutputNode => eval(n.node.get, state)
     }
 
     state.put(node, res)
     res
+  }
+
+  class SpecValidator(val state: mutable.HashMap[Node, Int]) extends State {
+    def apply(node: Node): Int = eval(node, state)
+    def update(node: Node, value: Int): Unit = {
+      val ref = this(node)
+      assert(ref == value, s"Spec mismatch on node $node, expected $value got $ref")
+    }
   }
 
   val a = new ConstantNode(4, 3)
@@ -95,5 +182,26 @@ object Test extends App {
   val rval = eval(res2, new mutable.HashMap[Node, Int]())
   assert(rval == 8)
 
+  def autoTest(module: Module): Unit = {
+
+    def testInputs(inputs: Vector[InputNode]): Unit = {
+      inputs.headOption match {
+        case None =>
+          val validator = new SpecValidator(new mutable.HashMap[Node, Int]())
+          module.spec(validator)
+        case Some(input) =>
+          val maxValue = 1 << input.len
+          for (value <- 0 until maxValue) {
+            input.clear()
+            input := new ConstantNode(input.length, value)
+            testInputs(inputs.tail)
+          }
+      }
+    }
+
+    testInputs(module.inputs)
+  }
+
+  autoTest(new AddBitImpl())
 }
 

@@ -30,10 +30,18 @@ object BinaryOp {
   }
 }
 
+object Node {
+  def stackTrace(): List[Array[StackTraceElement]] = {
+    Thread.currentThread.getStackTrace() :: Nil
+  }
+}
+
 abstract class Node extends IndexedSeq[IndexNode]  {
   def length: Int
 
   def mapNodes(f: Node => Node): Node
+
+  var stackTrace: List[Array[StackTraceElement]] = Node.stackTrace()
 
   override def iterator: Iterator[IndexNode] = new IndexNodeIterator(this)
 
@@ -69,6 +77,27 @@ abstract class Node extends IndexedSeq[IndexNode]  {
     case node: Node => this eq node
     case _ => false
   }
+
+  override def toString: String = {
+
+    def findLine(): Option[String] = {
+      for {
+        stack <- stackTrace
+        frame <- stack
+      } {
+        if (!frame.getFileName.contains("experiment") && !frame.getFileName.contains("Thread") && !frame.getClassName.contains("Node") && !frame.getClassName.contains("Module")) {
+          return Some(s"${frame.getFileName}:${frame.getLineNumber}")
+        }
+      }
+      None
+    }
+
+    val className = this.getClass.getSimpleName
+    findLine() match {
+      case Some(line) => s"$className($line)"
+      case None => className
+    }
+  }
 }
 
 object EmptyNode extends Node {
@@ -78,12 +107,6 @@ object EmptyNode extends Node {
 
   override def unary_~ : Node = EmptyNode
   override def ++(rhs: Node): Node = rhs
-}
-
-class InputNode(len: Int, val name: String) extends Node {
-  override val length: Int = len
-
-  override def mapNodes(f: Node => Node): Node = this
 }
 
 class ConstantNode(len: Int, val value: Int) extends Node {
