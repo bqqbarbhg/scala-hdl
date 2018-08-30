@@ -72,6 +72,16 @@ abstract class Node extends IndexedSeq[IndexNode]  {
 
   def ++(rhs: Node): Node = new ConcatNode(Vector(this, rhs))
 
+  override def splitAt(n: Int): (Node, Node) = {
+    assert(n >= 0, s"Split index must be positive, ($n >= 0)")
+    assert(n >= 0, s"Split index is out of bounds, ($n <= $length)")
+    n match {
+      case 0 => (EmptyNode, this)
+      case ix if ix == length => (this, EmptyNode)
+      case ix => (new SliceNode(this, 0, ix), new SliceNode(this, ix, length - ix))
+    }
+  }
+
   override def hashCode(): Int = System.identityHashCode(this)
   override def equals(that: Any) = that match {
     case node: Node => this eq node
@@ -114,6 +124,9 @@ class ConstantNode(len: Int, val value: Int) extends Node {
 
   override def mapNodes(f: Node => Node): Node = this
 }
+
+object Zero extends ConstantNode(1, 0)
+object One extends ConstantNode(1, 1)
 
 class IndexNode(val node: Node, val index: Int) extends Node {
   override def length: Int = 1

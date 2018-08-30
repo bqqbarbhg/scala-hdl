@@ -82,7 +82,7 @@ abstract class Module {
   def spec(state: State): Unit = { }
 }
 
-trait State {
+trait State extends Function[Node, Int] {
   def apply(node: Node): Int
   def update(node: Node, value: Int): Unit
 }
@@ -105,6 +105,35 @@ abstract class AddBit extends Module {
 class AddBitImpl extends AddBit {
   r := a ^ b ^ cin
   cout := (a & b) | (b & cin) | (cin & a)
+}
+
+abstract class Parity(val length: Int) extends Module {
+  val a = input(length)
+  val r = output(1)
+
+  override def spec(s: State): Unit = {
+    s(r) = a.map(s).reduce(_ ^ _)
+  }
+}
+
+class LinearParity(length: Int) extends Parity(length) {
+  r := a.reduceLeft[Node](_ ^ _)
+}
+
+object Util {
+  def logReduce(s: Node, f: (Node, Node) => Node): Node = {
+    s.length match {
+      case 0 => Zero
+      case 1 => s(0)
+      case _ =>
+        val (l, r) = s.splitAt(s.length / 2)
+        logReduce(l, f) ^ logReduce(r, f)
+    }
+  }
+}
+
+class LogParity(length: Int) extends Parity(length) {
+  r := Util.logReduce(a, (l, r) => l | r)
 }
 
 object Test extends App {
@@ -203,5 +232,7 @@ object Test extends App {
   }
 
   autoTest(new AddBitImpl())
+  autoTest(new LinearParity(8))
+  autoTest(new LogParity(8))
 }
 
