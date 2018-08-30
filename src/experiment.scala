@@ -37,9 +37,10 @@ object Node {
 }
 
 abstract class Node extends IndexedSeq[IndexNode]  {
-  def length: Int
 
+  def length: Int
   def mapNodes(f: Node => Node): Node
+  def support: Iterable[Node]
 
   var stackTrace: List[Array[StackTraceElement]] = Node.stackTrace()
 
@@ -112,8 +113,8 @@ abstract class Node extends IndexedSeq[IndexNode]  {
 
 object EmptyNode extends Node {
   override def length: Int = 0
-
   override def mapNodes(f: Node => Node): Node = EmptyNode
+  override def support: Iterable[Node] = None
 
   override def unary_~ : Node = EmptyNode
   override def ++(rhs: Node): Node = rhs
@@ -121,8 +122,8 @@ object EmptyNode extends Node {
 
 class ConstantNode(len: Int, val value: Int) extends Node {
   override val length: Int = len
-
   override def mapNodes(f: Node => Node): Node = this
+  override def support: Iterable[Node] = None
 }
 
 object Zero extends ConstantNode(1, 0)
@@ -136,6 +137,8 @@ class IndexNode(val node: Node, val index: Int) extends Node {
     if (fNode != node) new IndexNode(fNode, index)
     else this
   }
+
+  override def support: Iterable[Node] = Some(node)
 
   override def iterator: Iterator[IndexNode] = Iterator.single(this)
 
@@ -154,6 +157,8 @@ class SliceNode(val node: Node, val offset: Int, len: Int) extends Node {
     if (fNode != node) new SliceNode(fNode, offset, length)
     else this
   }
+
+  override def support: Iterable[Node] = Some(node)
 }
 
 class ConcatNode(val nodes: Vector[Node]) extends Node {
@@ -164,6 +169,8 @@ class ConcatNode(val nodes: Vector[Node]) extends Node {
     if (fNodes != nodes) new ConcatNode(fNodes)
     else this
   }
+
+  override def support: Iterable[Node] = nodes
 
   override def ++(rhs: Node): Node = new ConcatNode(nodes ++ rhs)
 }
@@ -179,6 +186,8 @@ class BinaryNode(val op: BinaryOp, val left: Node, val right: Node) extends Node
     if (fLeft != left || fRight != right) new BinaryNode(op, fLeft, fRight)
     else this
   }
+
+  override def support: Iterable[Node] = Array(left, right)
 }
 
 class NegateNode(val node: Node) extends Node {
@@ -189,5 +198,7 @@ class NegateNode(val node: Node) extends Node {
     if (fNode != node) new NegateNode(fNode)
     else this
   }
+
+  override def support: Iterable[Node] = Some(node)
 }
 

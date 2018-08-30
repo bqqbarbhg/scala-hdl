@@ -2,7 +2,7 @@ package hdl
 
 import scala.collection.mutable
 
-abstract class Pass {
+abstract class Pass extends Function[Node, Node] {
   protected var state = new mutable.HashMap[Node, Node]()
 
   def map(node: Node): Node = node.mapNodes(a => this(a))
@@ -19,15 +19,64 @@ abstract class Pass {
   }
 }
 
-object IdentityPass extends Pass {
+abstract class Visitor[T] extends Function[Node, T] {
+  protected var state = new mutable.HashMap[Node, T]()
+
+  def visit(node: Node): T
+
+  def apply(node: Node): T = {
+    for (res <- state.get(node)) return res
+
+    val res = visit(node)
+
+    state.put(node, res)
+    res
+  }
+}
+
+class IdentityPass extends Pass {
   override def map(node: Node): Node = super.map(node)
 }
 
-object IncrementConstants extends Pass {
+class IncrementConstants extends Pass {
 
   override def map(node: Node): Node = node match {
     case n: ConstantNode => new ConstantNode(n.length, n.value + 1)
     case _ => super.map(node)
+  }
+
+}
+
+class GateCalculator extends Visitor[Int] {
+
+  override def visit(node: Node): Int = {
+    val cost = node match {
+      case n: BinaryNode => 1
+      case n: NegateNode => 1
+      case _ => 0
+    }
+
+    if (node.support.nonEmpty)
+      node.support.map(this).sum + cost
+    else
+      cost
+  }
+
+}
+
+class DepthCalculator extends Visitor[Int] {
+
+  override def visit(node: Node): Int = {
+    val cost = node match {
+      case n: BinaryNode => 1
+      case n: NegateNode => 1
+      case _ => 0
+    }
+
+    if (node.support.nonEmpty)
+      node.support.map(this).max + cost
+    else
+      cost
   }
 
 }
@@ -37,6 +86,7 @@ class InputNode(val module: Module, val len: Int) extends Node {
 
   override def length: Int = len
   override def mapNodes(f: Node => Node): Node = this
+  override def support: Iterable[Node] = None
 
   def clear(): Unit = { node = None }
 
@@ -52,6 +102,7 @@ class OutputNode(val module: Module, val len: Int) extends Node {
 
   override def length: Int = len
   override def mapNodes(f: Node => Node): Node = this
+  override def support: Iterable[Node] = node
 
   def :=(n: Node): Unit = {
     assert(node.isEmpty, s"Output $this is already connected to ${node.get}")
@@ -202,11 +253,11 @@ object Test extends App {
   assert(res.length == a.length)
   assert(cout.length == 1)
 
-  val resI = IdentityPass(res)
+  val resI = new IdentityPass()(res)
 
   assert(resI eq res)
 
-  val res2 = IncrementConstants(res)
+  val res2 = new IncrementConstants()(res)
 
   val rval = eval(res2, new mutable.HashMap[Node, Int]())
   assert(rval == 8)
@@ -234,5 +285,11 @@ object Test extends App {
   autoTest(new AddBitImpl())
   autoTest(new LinearParity(8))
   autoTest(new LogParity(8))
+
+  println(new GateCalculator()(new LinearParity(32).r))
+  println(new GateCalculator()(new LogParity(32).r))
+
+  println(new DepthCalculator()(new LinearParity(32).r))
+  println(new DepthCalculator()(new LogParity(32).r))
 }
 
