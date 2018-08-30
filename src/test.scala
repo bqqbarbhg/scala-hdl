@@ -17,6 +17,19 @@ abstract class Pass {
   }
 }
 
+object IdentityPass extends Pass {
+  override def map(node: Node): Node = super.map(node)
+}
+
+object IncrementConstants extends Pass {
+
+  override def map(node: Node): Node = node match {
+    case n: ConstantNode => new ConstantNode(n.length, n.value + 1)
+    case _ => super.map(node)
+  }
+
+}
+
 object Test extends App {
 
   def maj3(a: Node, b: Node, c: Node): Node = (a & b) | (b & c) | (c & a)
@@ -73,8 +86,14 @@ object Test extends App {
   assert(res.length == a.length)
   assert(cout.length == 1)
 
-  val rval = eval(res, new mutable.HashMap[Node, Int]())
-  assert(rval == 5)
+  val resI = IdentityPass(res)
+
+  assert(resI eq res)
+
+  val res2 = IncrementConstants(res)
+
+  val rval = eval(res2, new mutable.HashMap[Node, Int]())
+  assert(rval == 8)
 
 }
 
