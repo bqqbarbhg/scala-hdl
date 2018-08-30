@@ -48,6 +48,7 @@ class IncrementConstants extends Pass {
 }
 
 class GateCalculator extends Visitor[Int] {
+  var count = 0
 
   override def visit(node: Node): Int = {
     val cost = node match {
@@ -55,11 +56,12 @@ class GateCalculator extends Visitor[Int] {
       case n: NegateNode => 1
       case _ => 0
     }
+    count += cost
 
-    if (node.support.nonEmpty)
-      node.support.map(this).sum + cost
-    else
-      cost
+    for (n <- node.support)
+      this(n)
+
+    count
   }
 
 }
@@ -86,7 +88,7 @@ class InputNode(val module: Module, val len: Int) extends Node {
 
   override def length: Int = len
   override def mapNodes(f: Node => Node): Node = this
-  override def support: Iterable[Node] = None
+  override def support: Iterable[Node] = node
 
   def clear(): Unit = { node = None }
 
@@ -130,7 +132,7 @@ abstract class Module {
   def inputs: Vector[InputNode] = inputsMutable
   def outputs: Vector[OutputNode] = outputsMutable
 
-  def spec(state: State): Unit = { }
+  def spec(s: State): Unit = { }
 }
 
 trait State extends Function[Node, Int] {
@@ -185,6 +187,38 @@ object Util {
 
 class LogParity(length: Int) extends Parity(length) {
   r := Util.logReduce(a, (l, r) => l | r)
+}
+
+abstract class Adder(val length: Int) extends Module {
+  val a = input(length)
+  val b = input(length)
+  val cin = input(1)
+
+  val r = output(length)
+  val cout = output(1)
+
+  override def spec(s: State): Unit = {
+    val sum = s(a) + s(b) + s(cin)
+    s(r) = sum & ((1 << length) - 1)
+    s(cout) = sum >> length
+  }
+}
+
+class LinearAdder(length: Int) extends Adder(length) {
+  {
+    var carry: Node = cin
+    val bits = for ((ab, bb) <- a zip b) yield {
+      val addBit = new AddBitImpl()
+      addBit.a := ab
+      addBit.b := bb
+      addBit.cin := carry
+      carry = addBit.cout
+      addBit.r
+    }
+
+    r := new ConcatNode(bits.toVector)
+    cout := carry
+  }
 }
 
 object Test extends App {
@@ -285,11 +319,14 @@ object Test extends App {
   autoTest(new AddBitImpl())
   autoTest(new LinearParity(8))
   autoTest(new LogParity(8))
+  autoTest(new LinearAdder(4))
 
   println(new GateCalculator()(new LinearParity(32).r))
   println(new GateCalculator()(new LogParity(32).r))
+  println(new GateCalculator()(new LinearAdder(32).r))
 
   println(new DepthCalculator()(new LinearParity(32).r))
   println(new DepthCalculator()(new LogParity(32).r))
+  println(new DepthCalculator()(new LinearAdder(32).r))
 }
 
