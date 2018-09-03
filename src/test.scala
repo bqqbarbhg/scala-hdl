@@ -221,6 +221,46 @@ class LinearAdder(length: Int) extends Adder(length) {
   }
 }
 
+abstract class Multiplier(val aLength: Int, val bLength: Int) extends Module {
+  val a = input(aLength)
+  val b = input(bLength)
+
+  val r = output(aLength + bLength)
+
+  override def spec(s: State): Unit = {
+    val i = s(a) * s(b)
+    s(r) = i
+  }
+}
+
+class SimpleMultiplier(aLength: Int, bLength: Int) extends Multiplier(aLength, bLength) {
+  var carry: Node = Zero
+  var result: Node = new ConstantNode(bLength, 0)
+
+  def zeroExtend(node: Node, length: Int): Node = {
+    assert(length >= node.length)
+    if (length > node.length)
+      node ++ new ConstantNode(length - node.length, 0)
+    else
+      node
+  }
+
+  for (bit <- 0 until aLength) {
+    val pad = new ConstantNode(bit, 0)
+    val aa = pad ++ a
+    val bb = zeroExtend(result, bLength + bit)
+    val adder: Adder = new LinearAdder(bLength + bit)
+    val mask = b(bit)
+    val aas = aa.map(_ & mask)
+    adder.a := aas
+    adder.b := bb
+    adder.cin := Zero
+    result = adder.r ++ adder.cout
+  }
+
+  r := zeroExtend(result, aLength + bLength)
+}
+
 object Test extends App {
 
   def maj3(a: Node, b: Node, c: Node): Node = (a & b) | (b & c) | (c & a)
@@ -320,13 +360,16 @@ object Test extends App {
   autoTest(new LinearParity(8))
   autoTest(new LogParity(8))
   autoTest(new LinearAdder(4))
+  autoTest(new SimpleMultiplier(4, 4))
 
   println(new GateCalculator()(new LinearParity(32).r))
   println(new GateCalculator()(new LogParity(32).r))
   println(new GateCalculator()(new LinearAdder(32).r))
+  println(new GateCalculator()(new SimpleMultiplier(32, 32).r))
 
   println(new DepthCalculator()(new LinearParity(32).r))
   println(new DepthCalculator()(new LogParity(32).r))
   println(new DepthCalculator()(new LinearAdder(32).r))
+  println(new DepthCalculator()(new SimpleMultiplier(32, 32).r))
 }
 

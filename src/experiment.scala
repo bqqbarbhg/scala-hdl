@@ -1,6 +1,9 @@
 package hdl
 
-import scala.collection.AbstractSeq
+import scala.collection.{AbstractSeq, IndexedSeqLike, mutable}
+import scala.collection.generic.CanBuildFrom
+import scala.collection.immutable.VectorBuilder
+import scala.collection.mutable.ArrayBuffer
 
 class IndexNodeIterator(val node: Node) extends Iterator[IndexNode] {
   override val length = node.length
@@ -30,13 +33,33 @@ object BinaryOp {
   }
 }
 
+class NodeBuilder extends mutable.Builder[Node, Node] {
+  private val nodes = new VectorBuilder[Node]
+
+  override def +=(elem: Node): NodeBuilder.this.type = { nodes += elem; this }
+  override def clear(): Unit = nodes.clear()
+  override def result(): Node = {
+    val res = nodes.result()
+    if (res.length == 1) res.head else new ConcatNode(res)
+  }
+  override def sizeHint(size: Int): Unit = nodes.sizeHint(size)
+}
+
 object Node {
   def stackTrace(): List[Array[StackTraceElement]] = {
     Thread.currentThread.getStackTrace() :: Nil
   }
+
+  def newBuilder: mutable.Builder[Node, Node] = new NodeBuilder()
+  implicit def canBuildFrom: CanBuildFrom[Node, Node, Node] = new CanBuildFrom[Node, Node, Node] {
+    override def apply(from: Node) = new NodeBuilder()
+    override def apply() = new NodeBuilder()
+  }
 }
 
-abstract class Node extends IndexedSeq[IndexNode]  {
+abstract class Node extends AbstractSeq[Node]
+  with IndexedSeq[Node]
+  with IndexedSeqLike[Node, Node] {
 
   def length: Int
   def mapNodes(f: Node => Node): Node
@@ -44,9 +67,11 @@ abstract class Node extends IndexedSeq[IndexNode]  {
 
   var stackTrace: List[Array[StackTraceElement]] = Node.stackTrace()
 
+  override protected[this] def newBuilder: mutable.Builder[Node, Node] = Node.newBuilder
+
   override def iterator: Iterator[IndexNode] = new IndexNodeIterator(this)
 
-  override def apply(index: Int): IndexNode = {
+  override def apply(index: Int): Node = {
     assert(index >= 0, s"Index must be non-negative, ($index >= 0)")
     assert(index >= 0, s"Index out of bounds, ($index < $size)")
     new IndexNode(this, index)
